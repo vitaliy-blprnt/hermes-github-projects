@@ -71,6 +71,21 @@ class ServiceTests(unittest.TestCase):
     def payload(self, index=-1):
         return json.loads(self.gh.call_args_list[index].kwargs['input'])
 
+    def test_default_projects_discover_viewer_and_organizations(self):
+        self.queue(reply({'login': 'example'}), reply([{'login': 'team'}]))
+        with patch.object(service, '_projects', side_effect=lambda owner: {'projects': [{'owner': owner, 'number': 1, 'title': owner, 'url': 'https://github.com'}]}):
+            result = service.execute('projects', {})
+        self.assertEqual(result['viewer'], 'example')
+        self.assertEqual([p['owner'] for p in result['projects']], ['example', 'team'])
+        self.assertEqual(result['warnings'], [])
+
+    def test_default_projects_retains_own_list_when_org_discovery_denied(self):
+        self.queue(reply({'login': 'example'}), subprocess.CompletedProcess([], 1, '', 'organization access denied'))
+        with patch.object(service, '_projects', return_value={'projects': [{'owner': 'example', 'number': 1}]}):
+            result = service.execute('projects', {})
+        self.assertEqual(len(result['projects']), 1)
+        self.assertIn('organization access denied', result['warnings'][0])
+
     def test_import_by_path_without_package_registration(self):
         spec = importlib.util.spec_from_file_location('standalone_plugin', Path(service.__file__))
         module = importlib.util.module_from_spec(spec)

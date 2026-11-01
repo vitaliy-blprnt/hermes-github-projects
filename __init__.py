@@ -25,7 +25,7 @@ def register(ctx):
     issue = {**repo, "number": positive}
     project = {"owner": string, "number": positive}
     operations = [
-        ("list", "projects", "List all accessible projects owned by a GitHub user or organization.", {"owner": string}, ["owner"]),
+        ("list", "projects", "List projects for the authenticated GitHub account and its organizations. Optionally restrict to an exact owner.", {"owner": string}, []),
         ("board", "board", "Read all project cards and Status options. Includes issues, PRs, and drafts.", project, ["owner", "number"]),
         ("issue", "issue", "Read an issue and its comments before editing; retain updatedAt for concurrency checks.", issue, ["repo", "number"]),
         ("create_issue", "create_issue", "Create an issue and add it to the selected project. Only on explicit request. Do not blindly retry failures.", {**repo, "title": string, "body": string, "labels": strings, "assignees": strings, "owner": string, "project_number": positive}, ["repo", "title", "body", "owner", "project_number"]),

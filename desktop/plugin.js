@@ -1,12 +1,16 @@
-import { host, useValue, useQuery, useMutation, useQueryClient, gatewayActivationEpoch, Button, Input, Textarea, ROUTES_AREA, SIDEBAR_NAV_AREA } from '@hermes/plugin-sdk';
+import { host, useValue, useQuery, useMutation, gatewayActivationEpoch, Button, Input, Textarea, ROUTES_AREA, SIDEBAR_NAV_AREA } from '@hermes/plugin-sdk';
 import { useEffect, useRef, useState } from 'react';
 import { jsx, jsxs } from 'react/jsx-runtime';
 
-export const scopeKey = () => ['github-projects', host.state.connectionId.get(), host.state.profile.get(), gatewayActivationEpoch()];
+export const scopeKey = () => {
+  const connection = host.state.connectionId.get() || 'local';
+  const owner = host.state.focusedSessionOwner.get();
+  return ['github-projects', connection, owner?.connectionId === connection ? owner.profile : host.state.profile.get(), gatewayActivationEpoch()];
+};
 const sameScope = (scope) => JSON.stringify(scope) === JSON.stringify(scopeKey());
 export const call = async (ctx, scope, operation, args) => {
   if (!sameScope(scope)) throw new Error('Gateway/profile changed. Refresh before continuing.');
-  const result = await ctx.rest('/call', { method: 'POST', body: { operation, arguments: args } });
+  const result = await ctx.rest(`/call?profile=${encodeURIComponent(scope[2] || 'default')}`, { method: 'POST', body: { operation, arguments: args } });
   if (!sameScope(scope)) throw new Error('Gateway/profile changed while the request was running. Refresh to see its outcome.');
   if (result?.ok !== true) throw new Error(result?.error || 'The plugin backend returned an invalid response.');
   return result.data;
@@ -90,34 +94,41 @@ function CreateIssue({ ctx, scope, owner, number, refresh, close }) {
 }
 
 export function BoardPage({ ctx, scope }) {
-  const [ownerInput, setOwnerInput] = useState(''); const [owner, setOwner] = useState('');
-  const [number, setNumber] = useState(null); const [search, setSearch] = useState(''); const [selected, setSelected] = useState(null); const [creating, setCreating] = useState(false);
-  const client = useQueryClient();
-  const projects = useQuery({ queryKey: [...scope, 'projects', owner], queryFn: () => call(ctx, scope, 'projects', { owner }), enabled: !!owner, retry: false });
+  const [ownerInput, setOwnerInput] = useState(''); const [listOwner, setListOwner] = useState('');
+  const [project, setProject] = useState(null); const owner = project?.owner; const number = project?.number;
+  const [projectSearch, setProjectSearch] = useState(''); const [search, setSearch] = useState(''); const [selected, setSelected] = useState(null); const [creating, setCreating] = useState(false);
+  const projects = useQuery({ queryKey: [...scope, 'projects', listOwner], queryFn: () => call(ctx, scope, 'projects', listOwner ? { owner: listOwner } : {}), retry: false, refetchOnWindowFocus: false });
   const board = useQuery({ queryKey: [...scope, 'board', owner, number], queryFn: () => call(ctx, scope, 'board', { owner, number }), enabled: !!owner && !!number, retry: false, refetchOnWindowFocus: false });
   const refresh = async () => { const result = await board.refetch(); if (result.error) throw result.error; };
   const move = useMutation({ mutationFn: async ({ item, option }) => { await call(ctx, scope, 'move', { owner, number, item_id: item.id, option_id: option, expected_status: item.status }); await refresh(); } });
   const external = useMutation({ mutationFn: url => openGithub(ctx, url) });
   const busy = move.isPending || board.isFetching;
-  const data = board.data;
+  const data = project ? board.data : null;
   const columns = data ? columnsFor(data, search) : [];
-  return jsxs('main', { style: { padding: 16, display: 'grid', alignContent: 'start', gap: 16, height: '100%', overflow: 'auto', color: 'var(--ui-text-primary)' }, children: [
-    jsx('h1', { style: { fontSize: 20, fontWeight: 600 }, children: 'GitHub Projects' }),
-    jsx('p', { children: 'GitHub is authoritative. Only explicit actions change issues or project status; opening this board starts no work. No status is view-only: move items to an existing Status option, not back to No status.' }),
-    jsxs('form', { style: row, onSubmit: e => { e.preventDefault(); setNumber(null); setSelected(null); setCreating(false); setOwner(ownerInput.trim()); void client.invalidateQueries({ queryKey: [...scope, 'projects', ownerInput.trim()] }); }, children: [field('GitHub owner or organization', ownerInput, setOwnerInput, false, { required: true, style: { minWidth: 260 } }), jsx(Button, { type: 'submit', children: 'Load projects' })] }),
-    errorView(projects.error), errorView(board.error), errorView(move.error), errorView(external.error),
-    projects.isFetching ? jsx('p', { role: 'status', children: 'Loading projects…' }) : null,
-    projects.data ? jsxs('label', { children: ['Project ', jsxs('select', { value: number ?? '', disabled: busy, onChange: e => { setNumber(e.target.value ? Number(e.target.value) : null); setSelected(null); setCreating(false); }, children: [jsx('option', { value: '', children: 'Select a project' }), ...projects.data.projects.map(p => jsx('option', { value: p.number, children: `${p.title} (#${p.number})` }, p.number))] })] }) : null,
-    projects.data?.projects.length === 0 ? jsx('p', { children: 'No accessible projects for this owner.' }) : null,
+  const visibleProjects = (projects.data?.projects || []).filter(p => `${p.title} ${p.owner} #${p.number}`.toLocaleLowerCase().includes(projectSearch.toLocaleLowerCase()));
+  return jsxs('main', { style: { padding: 12, display: 'grid', alignContent: 'start', gap: 12, height: '100%', minWidth: 0, overflow: 'auto', color: 'var(--ui-text-primary)' }, children: [
+    jsxs('header', { style: row, children: [jsx('h1', { style: { fontSize: 18, fontWeight: 600, margin: 0 }, children: 'GitHub Projects' }), jsx('small', { style: { ...box, padding: '2px 6px', color: 'var(--ui-text-secondary)' }, children: scope[2] || 'default' })] }),
+    !project ? jsxs('section', { 'aria-label': 'Project browser', style: { display: 'grid', gap: 12, minWidth: 0 }, children: [
+      jsxs('div', { style: { ...row, justifyContent: 'space-between' }, children: [jsx('h2', { style: { fontSize: 14, margin: 0 }, children: listOwner ? `Projects for ${listOwner}` : 'Your account & organization projects' }), jsx(Button, { disabled: projects.isFetching, onClick: () => projects.refetch(), children: 'Refresh projects' })] }),
+      field('Search projects', projectSearch, setProjectSearch, false, { placeholder: 'Title, owner or #number', type: 'search' }),
+      jsxs('details', { children: [jsx('summary', { style: { cursor: 'pointer', fontSize: 13 }, children: 'Other owner' }), jsxs('form', { style: { ...row, marginTop: 8 }, onSubmit: e => { e.preventDefault(); const next = ownerInput.trim(); setProjectSearch(''); if (next === listOwner) void projects.refetch(); else setListOwner(next); }, children: [field('GitHub owner or organization', ownerInput, setOwnerInput, false, { required: true }), jsx(Button, { type: 'submit', disabled: projects.isFetching, children: 'Load projects' }), listOwner ? jsx(Button, { onClick: () => { setListOwner(''); setOwnerInput(''); setProjectSearch(''); }, children: 'My projects' }) : null] })] }),
+      errorView(projects.error),
+      projects.isFetching ? jsx('p', { role: 'status', children: 'Loading projects…' }) : null,
+      ...(projects.data?.warnings || []).map((warning, index) => jsx('p', { role: 'status', style: { margin: 0, fontSize: 13 }, children: warning }, index)),
+      projects.data && !projects.data.projects.length ? jsx('p', { role: 'status', children: 'No accessible projects found. Try another owner or check GitHub project access.' }) : null,
+      projects.data?.projects.length > 0 && !visibleProjects.length ? jsx('p', { role: 'status', children: 'No projects match your search.' }) : null,
+      jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 8 }, children: visibleProjects.map(p => jsxs(Button, { 'aria-label': `${p.title} ${p.owner} · #${p.number}`, style: { ...box, display: 'grid', gap: 4, height: 'auto', minWidth: 0, textAlign: 'left', justifyContent: 'stretch', whiteSpace: 'normal', overflowWrap: 'anywhere' }, onClick: () => { setProject({ owner: p.owner, number: p.number, title: p.title }); setSearch(''); setSelected(null); setCreating(false); move.reset(); external.reset(); }, children: [jsx('strong', { children: p.title }), jsx('small', { style: { color: 'var(--ui-text-secondary)' }, children: `${p.owner} · #${p.number}` })] }, `${p.owner}/${p.number}`)) })
+    ] }) : jsxs('div', { style: row, children: [jsx(Button, { disabled: busy || creating || !!selected, onClick: () => { setProject(null); setSearch(''); move.reset(); external.reset(); }, children: 'Back to projects' }), jsx('strong', { style: { overflowWrap: 'anywhere' }, children: `${project.title} · ${owner} #${number}` })] }),
+    errorView(board.error), errorView(move.error), errorView(external.error),
     number ? jsxs('div', { style: row, children: [field('Search issues, labels, assignees', search, setSearch), jsx(Button, { disabled: busy, onClick: () => board.refetch(), children: 'Refresh board' }), jsx(Button, { disabled: busy || !data, onClick: () => setCreating(true), children: 'New issue' }), data ? jsx(Button, { onClick: () => external.mutate(data.project.url), children: 'Open project on GitHub' }) : null] }) : null,
     board.isFetching ? jsx('p', { role: 'status', children: 'Refreshing from GitHub…' }) : null,
     creating ? jsx(CreateIssue, { ctx, scope, owner, number, refresh, close: () => setCreating(false) }) : null,
-    data ? jsxs('section', { 'aria-label': data.project.title, children: [jsx('h2', { children: data.project.title }), data.items.length === 0 ? jsx('p', { children: 'This project has no items. Create an issue or add items on GitHub.' }) : null,
+    data ? jsxs('section', { style: { minWidth: 0 }, 'aria-label': data.project.title, children: [jsx('p', { style: { fontSize: 12, color: 'var(--ui-text-secondary)', margin: '0 0 8px' }, children: 'Changes save to GitHub only when you act. No status is view-only. Opening a board starts no work.' }), data.items.length === 0 ? jsx('p', { children: 'This project has no items. Create an issue or add items on GitHub.' }) : null,
       search && columns.every(c => !c.items.length) ? jsx('p', { role: 'status', children: 'No items match your search.' }) : null,
-      jsx('div', { style: { display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 12 }, children: columns.map(column => jsxs('section', { style: { ...box, minWidth: 260, width: 300, flexShrink: 0 }, 'aria-label': column.name, onDragOver: e => { if (!busy && data.status_field.options.some(o => o.id === column.id)) e.preventDefault(); }, onDrop: e => { e.preventDefault(); if (busy || !data.status_field.options.some(o => o.id === column.id)) return; const item = data.items.find(i => i.id === e.dataTransfer.getData('text/plain')); if (item && item.status !== column.id) move.mutate({ item, option: column.id }); }, children: [
-        jsx('h3', { children: `${column.name} (${column.items.length})` }), ...column.items.map(item => jsxs('article', { style: { ...box, marginBottom: 8, overflowWrap: 'anywhere' }, draggable: !busy, onDragStart: e => { e.dataTransfer.setData('text/plain', item.id); e.dataTransfer.effectAllowed = 'move'; }, children: [
+      jsx('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 8, overflowX: 'auto', paddingBottom: 12 }, children: columns.map(column => jsxs('section', { style: { ...box, padding: 8, minWidth: 0, width: 'min(280px, 100%)', flexShrink: 0 }, 'aria-label': column.name, onDragOver: e => { if (!busy && data.status_field.options.some(o => o.id === column.id)) e.preventDefault(); }, onDrop: e => { e.preventDefault(); if (busy || !data.status_field.options.some(o => o.id === column.id)) return; const item = data.items.find(i => i.id === e.dataTransfer.getData('text/plain')); if (item && item.status !== column.id) move.mutate({ item, option: column.id }); }, children: [
+        jsx('h3', { style: { fontSize: 13, margin: '0 0 8px' }, children: `${column.name} (${column.items.length})` }), ...column.items.map(item => jsxs('article', { style: { ...box, padding: 10, marginBottom: 8, overflowWrap: 'anywhere' }, draggable: !busy, onDragStart: e => { e.dataTransfer.setData('text/plain', item.id); e.dataTransfer.effectAllowed = 'move'; }, children: [
           jsx('small', { children: `${item.kind} · ${item.repository || 'Draft'}${item.number ? ` #${item.number}` : ''}` }),
-          jsx('h4', { children: item.title }), jsx('p', { children: [...item.labels, ...item.assignees.map(a => `@${a}`)].join(' · ') }),
+          jsx('h4', { style: { fontSize: 14, margin: '6px 0' }, children: item.title }), item.labels.length || item.assignees.length ? jsx('p', { style: { fontSize: 12, margin: '0 0 8px', color: 'var(--ui-text-secondary)' }, children: [...item.labels, ...item.assignees.map(a => `@${a}`)].join(' · ') }) : null,
           jsx(Button, { disabled: busy || (item.kind !== 'Issue' && !item.url), onClick: () => item.kind === 'Issue' ? setSelected(item) : external.mutate(item.url), children: item.kind === 'Issue' ? 'Edit issue' : 'Open on GitHub' }),
           jsxs('label', { style: { display: 'block', marginTop: 8 }, children: ['Status ', jsx('select', { 'aria-label': `Status for ${item.title}`, value: item.status ?? '', disabled: busy, onChange: e => { const option = e.target.value; if (option !== item.status && data.status_field.options.some(o => o.id === option)) move.mutate({ item, option }); }, children: columns.map(c => jsx('option', { value: c.id ?? '', disabled: !data.status_field.options.some(o => o.id === c.id), children: c.name }, c.id ?? 'none')) })] })
         ] }, item.id)), !column.items.length ? jsx('p', { children: 'No items' }) : null
@@ -127,7 +138,7 @@ export function BoardPage({ ctx, scope }) {
   ] });
 }
 function ScopedPage({ ctx }) {
-  useValue(host.state.connectionId); useValue(host.state.profile); useValue(host.state.gateway);
+  useValue(host.state.connectionId); useValue(host.state.profile); useValue(host.state.focusedSessionOwner); useValue(host.state.gateway);
   const scope = scopeKey();
   return jsx(BoardPage, { ctx, scope }, JSON.stringify(scope));
 }

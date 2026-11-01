@@ -9,8 +9,8 @@ Use the plugin's `github_projects_*` tools to manage the same GitHub data displa
 
 ## Select the target
 
-1. Obtain an explicit GitHub owner and project number from the request or current conversation. Never infer them from an unrelated checkout.
-2. Call `github_projects_list` if the project is unknown. Call `github_projects_board` before moving cards; use the returned exact item ID, Status option ID and current status.
+1. Call `github_projects_list` without arguments to discover the signed-in account's and its organizations' projects, or pass an explicit owner to narrow the list. Report any discovery warnings; a partial list is not complete.
+2. Select an explicit owner and project number from those results, the request or the current conversation; never infer them from an unrelated checkout. Call `github_projects_board` before moving cards; use the returned exact item ID, Status option ID and current status.
 3. Issue numbers are repository-scoped. Confirm the exact `owner/repository` before creating, editing, commenting, closing or reopening anything.
 
 ## Mutations

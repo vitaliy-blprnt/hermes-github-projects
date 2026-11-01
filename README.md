@@ -4,7 +4,7 @@ A native Hermes Desktop Kanban board backed by GitHub Projects, with matching ag
 
 ## Features
 
-- Choose a user/organization project and use its existing **Status** options as columns.
+- Browse projects automatically loaded from the signed-in GitHub account and its organizations, then open a project using its existing **Status** options as columns.
 - View issues, pull requests, drafts and cards without a status; search the board.
 - Move cards with drag-and-drop or an accessible status control.
 - Create/edit issues, labels and assignees; read/post comments; close/reopen issues.
@@ -33,7 +33,11 @@ hermes plugins install vitaliy-blprnt/hermes-github-projects --enable
 hermes plugins doctor github-projects --ci
 ```
 
-Enable **GitHub Projects** in Hermes Desktop's Plugins settings too. The Python plugin and Desktop UI have separate enablement gates. If your running gateway does not pick up the new plugin, restart it at a safe point. The sidebar opens the board; enter a GitHub user or organization and choose a project. No GitHub Projects are created automatically.
+Enable **GitHub Projects** in Hermes Desktop's Plugins settings too. The Python plugin and Desktop UI have separate enablement gates. If your running gateway does not pick up the new plugin, restart it at a safe point. The sidebar opens a project browser populated from the gateway's signed-in GitHub account and its organizations. Choose a project to open its board; an optional owner lookup supports other users/organizations. No GitHub Projects are created automatically.
+
+The board follows the focused chat's profile on the active connection, including when a default-profile gateway serves multiple profiles. Requests explicitly name that profile; the plugin must be enabled there. It does not silently borrow the default profile's permissions or credentials. The active profile is shown in the header.
+
+After a Python backend update, restart the gateway from an external terminal at a safe point: the plugin host caches its API router, and a Desktop reload or plugin toggle does not clear that cache. Do not issue a gateway restart from inside a running Hermes gateway chat. For a default-profile multiplexer, use `hermes --profile default gateway restart` in the external terminal.
 
 For a local development checkout, clone this repository into a new directory, then link it as `$HERMES_HOME/plugins/github-projects` and run `hermes plugins enable github-projects`. Never replace an existing plugin directory without inspecting it first. Use the actual profile's `HERMES_HOME`, not another profile's directory.
 

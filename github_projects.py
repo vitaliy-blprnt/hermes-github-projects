@@ -133,6 +133,24 @@ def _projects(owner):
     return {'projects': [dict(project, owner=owner) for project in _pages(fetch)]}
 
 
+def _discover_projects():
+    viewer = _owner(_request('user')['login'])
+    projects = _projects(viewer)['projects']
+    warnings = []
+    try:
+        organizations = _rest_pages('user/orgs')
+    except GitHubError as error:
+        organizations = []
+        warnings.append(f'Organization discovery incomplete: {error}')
+    for organization in organizations:
+        owner = _owner(organization['login'])
+        try:
+            projects.extend(_projects(owner)['projects'])
+        except GitHubError as error:
+            warnings.append(f'Projects for {owner} could not be loaded: {error}')
+    return {'viewer': viewer, 'projects': projects, 'warnings': warnings}
+
+
 def _project(owner, number):
     selection = 'projectV2(number:$number) { id title url }'
     query = 'query($id:ID!, $number:Int!) { node(id:$id) { ' + OWNER_FRAGMENTS % (selection, selection) + ' } }'
@@ -309,7 +327,7 @@ def execute(operation: str, arguments: dict) -> dict:
     names Issue, PullRequest, DraftIssue. Draft URL/number/repository are null.
     """
     schemas = {
-        'projects': ({'owner'}, set()), 'board': ({'owner', 'number'}, set()),
+        'projects': (set(), {'owner'}), 'board': ({'owner', 'number'}, set()),
         'issue': ({'repo', 'number'}, set()),
         'create_issue': ({'repo', 'title', 'body', 'owner', 'project_number'}, {'labels', 'assignees'}),
         'update_issue': ({'repo', 'number', 'expected_updated_at'}, {'title', 'body', 'labels', 'assignees'}),
@@ -342,7 +360,7 @@ def execute(operation: str, arguments: dict) -> dict:
         raise GitHubError('state must be OPEN or CLOSED')
     try:
         if operation == 'projects':
-            return _projects(args['owner'])
+            return _projects(args['owner']) if 'owner' in args else _discover_projects()
         if operation == 'board':
             return _board(args['owner'], args['number'])
         if operation == 'issue':

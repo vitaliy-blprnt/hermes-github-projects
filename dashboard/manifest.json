@@ -2,6 +2,7 @@
   "name": "github-projects",
   "label": "GitHub Projects",
   "description": "Backend for the native Hermes Desktop GitHub Projects plugin.",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "tab": { "hidden": true },
   "api": "plugin_api.py"
 }

@@ -2,8 +2,8 @@
 
 ## Executed
 
-- **31 Python tests passed, no skips**, using an existing Hermes Python runtime with FastAPI/HTTPX. Includes 27 service tests plus registration and HTTP adapter tests.
-- **7 Desktop tests passed**, rendering through real React DOM, React Query and jsdom; SDK host primitives and backend responses are mocked. Covers all card kinds, select/drag status changes, issue editing, comments, close/reopen, creation, search, errors, gateway/profile changes, and composer/clipboard behavior.
+- **33 Python tests passed, no skips**, using an existing Hermes Python runtime with FastAPI/HTTPX. Includes 29 service tests plus registration and HTTP adapter tests; automatic signed-in account/organization discovery and partial-discovery warnings are covered.
+- **10 Desktop tests passed**, rendering through real React DOM, React Query and jsdom; SDK host primitives and backend responses are mocked. Covers automatic read-only project discovery, project search and selection across owners, the multiplexed-profile routing regression, all card kinds, select/drag status changes, issue editing, comments, close/reopen, creation, errors, scope changes, and composer/clipboard behavior.
 - `node --check desktop/plugin.js` passed.
 - `hermes plugins doctor . --ci` passed: eight tools registered.
 - `hermes plugins validate . --json` passed all checks, with no warnings; security scan reported safe.
@@ -12,10 +12,13 @@
 - A move using an incorrect null previous status was rejected. GitHub had automatically assigned Todo on attachment. Re-reading the card and moving with its actual status succeeded; the plugin did not overwrite stale state.
 - The second temporary issue and test project were deleted; issue absence and project-list absence were verified.
 - **Installed Desktop smoke:** enabled the agent plugin in the active profile, reloaded Desktop plugins, enabled its Desktop half through Capabilities, opened the GitHub Projects sidebar page, entered the owner and loaded the project selector. The initial empty state and compact top-aligned layout were visually inspected; no plugin-load error appeared.
+- **404 investigation:** a live diagnostic showed the gateway socket profile was `default`, although the focused session belonged to the profile where the plugin was installed. The new regression failed with `default` versus the expected focused profile, then passed after explicit profile routing. The installed UI subsequently reached the correct backend instead of returning 404.
+- **Automatic discovery:** the new service was executed live and returned the signed-in account's and organization projects, including the owner's existing project. No project or issue was modified during this read-only check.
 
 ## Limits
 
 - The live Desktop smoke did not complete selection of the populated temporary project through the available computer-use bridge. Therefore real Desktop drag/drop, modal editing and composer insertion are **not** claimed as live-verified. Those paths have rendered mocked coverage; their shared GitHub service has live coverage.
+- The 0.1.1 Desktop project browser hot-reloaded, but the running Python plugin host retained its earlier router/service module and returned the old argument-validation error. Disabling/re-enabling the plugin did not clear that ASGI cache. A gateway restart from an external shell is required before claiming live project-browser acceptance. The runtime refused an in-gateway restart because it would terminate its own command; this restriction was not bypassed.
 - No exhaustive accessibility audit, narrow-window/theme matrix, remote-gateway test, or cross-account test was executed.
 - Read-before-write timestamp/status checks are best-effort, not atomic GitHub concurrency guarantees.
 - The source was installed locally via the active profile's plugin link. The app-level Desktop copy was created by Hermes' own reconciliation; other profile configurations were not edited.
