@@ -62,7 +62,7 @@ const setup = ({ projectList, projectError } = {}) => {
 };
 const loadBoard = async ui => {
   fireEvent.click(await ui.findByRole('button', { name: 'Shipping acme · #1' })); await ui.findByText('Fix login');
-  await waitFor(() => assert.equal(ui.getByText('Refresh board').disabled, false));
+  await waitFor(() => assert.equal(ui.getByRole('button', { name: 'Refresh board' }).disabled, false));
 };
 
 test('native contribution contract and scoped calls reject errors and late cross-host replies', async () => {
@@ -189,6 +189,6 @@ test('rendered empty and backend failure states retain full error', async () => 
   const ui = setup(); ui.board.items.length = 0; await loadBoard({ ...ui, findByText: async text => text === 'Fix login' ? null : ui.findByText(text) });
   assert.ok(ui.getByText('This project has no items. Create an issue or add items on GitHub.'));
   ui.ctx.rest = async () => ({ ok: false, error: 'GitHub denied access\nCheck projects scope and organization authorization.' });
-  fireEvent.click(ui.getByText('Refresh board'));
+  fireEvent.click(ui.getByRole('button', { name: 'Refresh board' }));
   await waitFor(() => assert.match(ui.getByRole('alert').textContent, /GitHub denied access\nCheck projects scope/));
 });
