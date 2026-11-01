@@ -1,0 +1,18 @@
+name: github-projects
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: GitHub Projects Kanban for Hermes Desktop, with shared agent tools and a companion skill.
+author: vitaliy-blprnt
+license: MIT
+homepage: https://github.com/vitaliy-blprnt/hermes-github-projects
+tags: [github, projects, kanban, desktop]
+provides_tools:
+  - github_projects_list
+  - github_projects_board
+  - github_projects_issue
+  - github_projects_create_issue
+  - github_projects_update_issue
+  - github_projects_comment
+  - github_projects_issue_state
+  - github_projects_move
